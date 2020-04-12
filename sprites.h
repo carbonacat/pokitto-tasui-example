@@ -104,8 +104,19 @@ public:
 	};
 };
 
+class PoopSpirit {
+public:
+    enum Animation : std::uint16_t {
+		appear = 0,
+		idle = 13,
+		disappear = 22,
+		disappeared = 37
+	};
+};
+
 
 // https://stackoverflow.com/a/19591902
 extern "C" {
 extern const Dude dude;
+extern const PoopSpirit poopSpirit;
 }

@@ -1,5 +1,6 @@
-#ifndef GAME_PLAYER_HPP
-#   define GAME_PLAYER_HPP
+#ifndef GAME_POOPSPIRIT_HPP
+#   define GAME_POOPSPIRIT_HPP
+
 
 #   include <Pokitto.h>
 #   include "sprites.h"
@@ -8,15 +9,16 @@
 
 namespace game
 {
-    class Player
+    class PoopSpirit
     {
     public: // Lifecycle.
-        void prepareForExploration() noexcept;
+        // Makes the spirit appear. It'll then cycle to Idle.
+        void appear() noexcept;
     
-        // Updates the player, allowing them to explore the map.
-        void updateExploration() noexcept;
+        // Makes the spirit disappear.
+        void disappear() noexcept;
         
-        // Renders the Player to the screen.
+        // Renders the spirit to the screen.
         void render(const Vector2& cameraPosition, bool withTP) noexcept;
         
     
@@ -31,28 +33,14 @@ namespace game
         {
             return _position;
         }
-        
-        auto& sprite() noexcept
-        {
-            return _sprite;
-        }
     
 
     private: // Fields
-        // Various speed.
-        struct Speeds
-        {
-            static constexpr auto regular = 2;
-            static constexpr auto grass = 1;
-            static constexpr auto stuck = 0;
-        };
-        
         Vector2 _position {0, 0};
-        int _speed = Speeds::stuck;
         int _tpTimer = 0;
 
         static constexpr Vector2 _spriteOrigin {8, 8};
-
+        
         Sprite _sprite;
         
         void _updateSpeedWithCurrentTile() noexcept;
@@ -60,4 +48,4 @@ namespace game
 }
 
 
-#endif // GAME_PLAYER_HPP
+#endif // GAME_POOPSPIRIT_HPP

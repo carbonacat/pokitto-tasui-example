@@ -375,6 +375,27 @@
 		},
 		"\\game\\Game.cpp": {
 			"sdcard": false
+		},
+		"\\sprites\\PoopSpirit.json": {
+			"sdcard": false
+		},
+		"\\sprites\\PoopSpirit.png": {
+			"sdcard": false
+		},
+		"\\sprites/PoopSpirit.bin": {
+			"sdcard": false
+		},
+		"\\sprites\\PoopSpirit.bin": {
+			"sdcard": false
+		},
+		"\\game\\PoopSpirit.hpp": {
+			"sdcard": false
+		},
+		"\\game\\PoopSpirit.cpp": {
+			"sdcard": false
+		},
+		"\\sprites\\PoopSpirit.h": {
+			"sdcard": false
 		}
 	},
 	"BUILDFlags": {

@@ -4,6 +4,8 @@
 #   include <Pokitto.h>
 #   include <Tilemap.hpp>
 #   include "game/Player.hpp"
+#   include "game/PoopSpirit.hpp"
+#   include "sprites.h"
 
 namespace game
 {
@@ -24,7 +26,10 @@ namespace game
         
     private: // Game components.
         static inline bool _playerIsShown = false;
+        static inline bool _tpIsShown = false;
         static inline Player _player;
+        static inline bool _tpForPoop = false;
+        static inline PoopSpirit _poopSpirit;
         static inline Tilemap _tilemap;
         
     private: // StoryStatuses.

@@ -1,13 +1,11 @@
 #include "game/Game.hpp"
 
-#   include <miloslav.h>
-#   include "sprites.h"
-#   include "Smile.h"
-#   include "ToiletPaper.h"
-#   include "game/Player.hpp"
-#   include "game/EnvTools.hpp"
-#   include <tasui>
-#   include <puits_UltimateUtopia.h>
+#include <miloslav.h>
+#include "sprites.h"
+#include "game/Player.hpp"
+#include "game/EnvTools.hpp"
+#include <tasui>
+#include <puits_UltimateUtopia.h>
 
 
 namespace game
@@ -223,6 +221,7 @@ namespace game
             if (_onFirstFrame())
             {
                 _player.setPosition({16, 16});
+                _poopSpirit.setPosition({11*16, 3*16+8});
                 _playerIsShown = true;
                 EnvTools::loadGarden(_tilemap);
                 _player.prepareForExploration();
@@ -230,9 +229,7 @@ namespace game
             if (Toolbox::onFadeInTransition())
                 _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
         }
-        // Exploration.
-        // Going in FountainFront tiles and pressing A -> hearTheFountainQuest.
-        // Going into GoToTitle tiles -> fadeOutToEscape.
+        
         static void updateMustGoInFrontOfTheFountain() noexcept
         {
             using PB = Pokitto::Buttons;
@@ -245,97 +242,175 @@ namespace game
                 _setStatusUpdate(StoryStatuses::updateFadeOutToEscape);
             else if (playerTile & FountainFront)
             {
-                Toolbox::onHint("A - Talk?");
+                Toolbox::onHint("A - Talk");
                 if (PB::pressed(BTN_A))
-                    _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
+                {
+                    _player.sprite().play(dude, Dude::punchN);
+                    _setStatusUpdate(StoryStatuses::updateHearTheFountainQuest);
+                }
             }
             else
                 Toolbox::onDehint();
         }
         
-        // Dialog. "Please ... I need ... some ... TP ... to get ... out ... of here!".
-        // Conclusion -> mustFindTP.
         static void updateHearTheFountainQuest() noexcept
         {
+            if (_onFirstFrame())
+                _poopSpirit.appear();
+            if (Toolbox::onDialog("Please...\nI need... some... TP... to get... out... of here!"))
+            {
+                _poopSpirit.disappear();
+                Toolbox::clear();
+                _setStatusUpdate(StoryStatuses::updateMustFindTP);
+            }
         }
         // Exploration.
         // Going on a TP Tile and pressing A -> gotTheLegendaryTP.
         // Going into GoToTitle tiles -> fadeOutToEscape.
         static void updateMustFindTP() noexcept
         {
+            using PB = Pokitto::Buttons;
+            
+            _player.updateExploration();
+            
+            auto playerTile = EnvTools::tileAtPosition(_player.position());
+            
+            if (playerTile & GoToTitle)
+                _setStatusUpdate(StoryStatuses::updateFadeOutToEscape);
+            else if (playerTile & RandomItem)
+            {
+                Toolbox::onHint("A - Search");
+                if (PB::pressed(BTN_A))
+                {
+                    _player.sprite().play(dude, Dude::yay);
+                    _setStatusUpdate(StoryStatuses::updateGotTheLegendaryTP);
+                }
+            }
+            else
+                Toolbox::onDehint();
         }
         
-        // Dialog. "You found the TP! It feels very soft."
-        // Conclusion -> gotTheLegendaryTP1.
         static void updateGotTheLegendaryTP() noexcept
         {
+            Toolbox::onDehint();
+            _tpIsShown = true;
+            if (Toolbox::onDialog("You found the Legendary Toilet Paper!\nIt feels very soft."))
+                _setStatusUpdate(StoryStatuses::updateGotTheLegendaryTP1);
         }
-        // Dialog. "Surely the Fountain will appreciate it."
-        // Conclusion -> mustGoBackToTheFountainOrEscapeWithIt.
         static void updateGotTheLegendaryTP1() noexcept
         {
+            Toolbox::onDehint();
+            if (Toolbox::onDialog("Surely the Fountain will appreciate it!"))
+            {
+                Toolbox::clear();
+                _setStatusUpdate(StoryStatuses::updateMustGoBackToTheFountainOrEscapeWithIt);
+                _tpIsShown = false;
+                _player.sprite().play(dude, Dude::walkS);
+            }
         }
-        // Exploration.
-        // Going in FountainFront tiles and pressing A -> giveTheTPToTheFountain.
-        // Going into GoToTitle tiles -> fadeOutToEscapeWithTP.
         static void updateMustGoBackToTheFountainOrEscapeWithIt() noexcept
         {
+            using PB = Pokitto::Buttons;
+            
+            _player.updateExploration();
+            
+            auto playerTile = EnvTools::tileAtPosition(_player.position());
+            
+            if (playerTile & GoToTitle)
+                _setStatusUpdate(StoryStatuses::updateFadeOutToEscapeWithTP);
+            else if (playerTile & FountainFront)
+            {
+                Toolbox::onHint("A - Give the TP");
+                if (PB::pressed(BTN_A))
+                {
+                    _player.sprite().play(dude, Dude::punchN);
+                    _tpIsShown = true;
+                    _setStatusUpdate(StoryStatuses::updateGiveTheTPToTheFountain);
+                }
+            }
+            else
+                Toolbox::onDehint();
         }
         
-        // Cinematic. The TP is thrown inside the fountain. The Spirit appears out of nowhere.
-        // End -> hearTheFountainThanks.
         static void updateGiveTheTPToTheFountain() noexcept
         {
+            if (_onFirstFrame())
+                _poopSpirit.appear();
+            if (_statusFrameNumber == 32)
+                _setStatusUpdate(StoryStatuses::updateHearTheFountainThanks);
+            Toolbox::onDehint();
         }
-        // Dialog. "Thank you for the TP. I can now rest in peace... Thank you ... again!"
-        // End -> seeTheSpiritGoingUp.
         static void updateHearTheFountainThanks() noexcept
         {
+            Toolbox::onDehint();
+            _tpIsShown = false;
+            if (Toolbox::onDialog("Thank you for the TP. I can now rest in peace...\nThank you ... again!"))
+            {
+                Toolbox::clear();
+                _setStatusUpdate(StoryStatuses::updateSeeTheSpiritGoingUp);
+            }
         }
-        // Cinematic. The spirit goes up.
-        // End -> fadeOutToGenerousEnding.
+        
         static void updateSeeTheSpiritGoingUp() noexcept
         {
+            if (_onFirstFrame())
+                _poopSpirit.disappear();
+            _poopSpirit.setPosition(_poopSpirit.position() + Vector2{0, -1});
+            if (_statusFrameNumber == 32)
+                _setStatusUpdate(StoryStatuses::updateFadeOutToGenerousEnding);
         }
-        // Cinematic. Blackout.
-        // End -> hearTheGenerousEnding.
+        
         static void updateFadeOutToGenerousEnding() noexcept
         {
+            if (Toolbox::onFadeOutTransition())
+            {
+                _setStatusUpdate(StoryStatuses::updateHearTheGenerousEnding);
+                _playerIsShown = false;
+                EnvTools::loadBlack(_tilemap);
+            }
         }
-        // Dialog. "You gave your only TP roll to the fountain. That was a selfless act."
-        // End -> hearTheGenerousEnding2
         static void updateHearTheGenerousEnding() noexcept
         {
+            if (Toolbox::onDialog("You gave your only TP roll to the fountain spirit. That was a selfless act."))
+                _setStatusUpdate(StoryStatuses::updateHearTheGenerousEnding2);
         }
-        // Dialog. "You might less heavy of one TP roll, but your soul shines a bit more."
-        // End -> hearTheGenerousEnding3
         static void updateHearTheGenerousEnding2() noexcept
         {
+            if (Toolbox::onDialog("You might be less heavy of one TP roll, but your soul shines a bit more."))
+                _setStatusUpdate(StoryStatuses::updateHearTheGenerousEnding3);
         }
-        // Dialog. "You made the right choice."
-        // End -> fin
         static void updateHearTheGenerousEnding3() noexcept
         {
+            if (Toolbox::onDialog("You made the right choice."))
+                _setStatusUpdate(StoryStatuses::updateFin);
         }
         
-        // Cinematic. Blackout.
-        // End -> hearTheEscapeWithTPEnding.
         static void updateFadeOutToEscapeWithTP() noexcept
         {
-        }
-        // Dialog. "You decided to escape with the TP instead of sharing it."
-        // End -> hearTheEscapeWithTPEnding2.
-        static void updateHearTheEscapeWithTPEnding() noexcept
-        {
-        }
-        // Dialog. "Your greediness corrupted your soul, as you didn't even need it."
-        // End -> fin
-        static void updateHearTheEscapeWithTPEnding2() noexcept
-        {
+            if (Toolbox::onFadeOutTransition())
+            {
+                _setStatusUpdate(StoryStatuses::updateHearTheEscapeWithTPEnding);
+                _playerIsShown = false;
+                EnvTools::loadBlack(_tilemap);
+            }
         }
         
-        // Cinematic. Blackout.
-        // End -> hearTheEscapeEnding.
+        static void updateHearTheEscapeWithTPEnding() noexcept
+        {
+            if (Toolbox::onDialog("You decided to escape with the TP instead of sharing it."))
+                _setStatusUpdate(StoryStatuses::updateHearTheEscapeWithTPEnding2);
+        }
+        static void updateHearTheEscapeWithTPEnding2() noexcept
+        {
+            if (Toolbox::onDialog("Your greediness corrupted your soul, as you didn't even need it."))
+                _setStatusUpdate(StoryStatuses::updateHearTheEscapeWithTPEnding3);
+        }
+        static void updateHearTheEscapeWithTPEnding3() noexcept
+        {
+            if (Toolbox::onDialog("At least, you've got some TP to wipe yourself out..."))
+                _setStatusUpdate(StoryStatuses::updateFin);
+        }
+        
         static void updateFadeOutToEscape() noexcept
         {
             if (Toolbox::onFadeOutTransition())
@@ -345,16 +420,12 @@ namespace game
                 EnvTools::loadBlack(_tilemap);
             }
         }
-        // Dialog. "You decided to ignore the quest. So neutral!"
-        // End -> fin
         static void updateHearTheEscapeEnding() noexcept
         {
             if (Toolbox::onDialog("You decided to ignore the quest.\n So neutral!"))
                 _setStatusUpdate(StoryStatuses::updateFin);
         }
         
-        
-        // Perpetual dialog. "The end."
         // (Final state).
         static void updateFin() noexcept
         {
@@ -393,9 +464,10 @@ namespace game
         };
     
         _tilemap.draw(-cameraPosition.x, -cameraPosition.y);
-        // Temp.
-        //PD::drawSprite(-cameraPosition.x, -cameraPosition.y, ToiletPaper, false, false, 0);
         if (_playerIsShown)
-            _player.render(cameraPosition);
+        {
+            _poopSpirit.render(cameraPosition, _tpForPoop);
+            _player.render(cameraPosition, _tpIsShown);
+        }
     }
 }
