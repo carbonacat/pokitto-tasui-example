@@ -20,7 +20,8 @@ namespace game
         static constexpr int dialogMargin = 2;
         static constexpr int dialogHeight = 5;
         
-        static constexpr int frameToLimitDivider = 4;
+        static constexpr int frameToLimitDivider = 2;
+        static constexpr int frameToFloatingLimitDivider = 16;
         static constexpr int frameToNextBlinkDivider = 16;
         static constexpr int frameToTileDivider = 1;
         static constexpr int frameCountUntilTransitionIsDone = frameToTileDivider * (PUI::mapColumns + PUI::mapRows + 1);
@@ -32,22 +33,22 @@ namespace game
         struct UIVariants
         {
             static constexpr unsigned standard = 0;
-            static constexpr unsigned darkBG = 8;
-            static constexpr unsigned halfTransparentDarkBG = 16;
+            static constexpr unsigned blackBG = 8;
+            static constexpr unsigned halfBlackBG = 16;
         };
         
         static void setupVariants() noexcept
         {
             for (int colorI = 0; colorI < 8; colorI++)
             {
-                PUI::mapColor(UIVariants::darkBG + colorI, colorI);
-                PUI::mapColor(UIVariants::halfTransparentDarkBG + colorI, colorI);
+                PUI::mapColor(UIVariants::blackBG + colorI, colorI);
+                PUI::mapColor(UIVariants::halfBlackBG + colorI, colorI);
             }
             // Using 0 as a remapped color will make it transparent.
-            PUI::mapColor(UIVariants::darkBG + puits::UltimateUtopia::Colors::bg1, pureBlackColor);
-            PUI::mapColor(UIVariants::darkBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
-            PUI::mapColor(UIVariants::halfTransparentDarkBG + puits::UltimateUtopia::Colors::bg1, 0);
-            PUI::mapColor(UIVariants::halfTransparentDarkBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
+            PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia::Colors::bg1, pureBlackColor);
+            PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
+            PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia::Colors::bg1, 0);
+            PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
         }
         
     
@@ -115,7 +116,7 @@ namespace game
         {
             if (_statusFrameNumber == 0)
             {
-                PUI::clear(32, UIVariants::darkBG);
+                PUI::clear(32, UIVariants::blackBG);
             }
             if (_statusFrameNumber % frameToTileDivider == 0)
             {
@@ -123,11 +124,42 @@ namespace game
                 
                 for (int i = reach; i >= 0; i--)
                 {
-                    PUI::setTileAndDelta(i, reach - i, 32, UIVariants::halfTransparentDarkBG);
+                    PUI::setTileAndDelta(i, reach - i, 32, UIVariants::halfBlackBG);
                     PUI::setTile(i - 2, reach - i, 0);
                 }
             }
             return _statusFrameNumber >= frameCountUntilTransitionIsDone;
+        }
+        
+        // Use the UI to make a transition from black to the map+sprites.
+        static bool onFadeOutTransition() noexcept
+        {
+            if (_statusFrameNumber == 0)
+                PUI::clear();
+            if (_statusFrameNumber % frameToTileDivider == 0)
+            {
+                auto reach = _statusFrameNumber / frameToTileDivider;
+                
+                for (int i = reach; i >= 0; i--)
+                {
+                    PUI::setTileAndDelta(i, reach - i, 32, UIVariants::halfBlackBG);
+                    PUI::setTileAndDelta(i - 2, reach - i, 32, UIVariants::blackBG);
+                }
+            }
+            return _statusFrameNumber >= frameCountUntilTransitionIsDone;
+        }
+        
+        static bool onFloatingText(const char* text) noexcept
+        {
+            auto textLen = strlen(text);
+            auto textLimit = _statusFrameNumber / frameToFloatingLimitDivider;
+            
+            PUI::clear(32, UIVariants::blackBG);
+            PUI::resetCursorBoundingBox();
+            PUI::setCursorDelta(UIVariants::blackBG);
+            PUI::setCursor((PUI::mapColumns - textLen) / 2, PUI::mapRows / 2);
+            PUI::printText("The end.", textLimit);
+            return textLimit > textLen;
         }
         
     private:
@@ -164,7 +196,7 @@ namespace game
             {
                 _player.setPosition({16, 16});
                 _playerIsShown = true;
-                _tilemapIsShown = true;
+                EnvTools::loadGarden(_tilemap);
                 _player.prepareForExploration();
             }
             if (Toolbox::onFadeInTransition())
@@ -176,6 +208,20 @@ namespace game
         static void updateMustGoInFrontOfTheFountain() noexcept
         {
             _player.updateExploration();
+            
+            auto playerTile = EnvTools::tileAtPosition(_player.position());
+            
+            if (playerTile & GoToTitle)
+                _setStatusUpdate(StoryStatuses::updateFadeOutToEscape);
+            else if (playerTile & FountainFront)
+            {
+                // Draw hint.
+                _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
+            }
+            else
+            {
+                // Remove hint.
+            }
         }
         
         // Dialog. "Please ... I need ... some ... TP ... to get ... out ... of here!".
@@ -263,11 +309,19 @@ namespace game
         // End -> hearTheEscapeEnding.
         static void updateFadeOutToEscape() noexcept
         {
+            if (Toolbox::onFadeOutTransition())
+            {
+                _setStatusUpdate(StoryStatuses::updateHearTheEscapeEnding);
+                _playerIsShown = false;
+                EnvTools::loadBlack(_tilemap);
+            }
         }
         // Dialog. "You decided to ignore the quest. So neutral!"
         // End -> fin
         static void updateHearTheEscapeEnding() noexcept
         {
+            if (Toolbox::onDialog("You decided to ignore the quest.\n So neutral!"))
+                _setStatusUpdate(StoryStatuses::updateFin);
         }
         
         
@@ -275,6 +329,7 @@ namespace game
         // (Final state).
         static void updateFin() noexcept
         {
+            Toolbox::onFloatingText("The End.");
         }
     };
     
@@ -288,7 +343,6 @@ namespace game
         PC::begin();
         PD::loadRGBPalette(miloslav);
         PD::palette[Toolbox::pureBlackColor] = 0;
-        EnvTools::loadGarden(_tilemap);
         PUI::setTilesetImage(puits::UltimateUtopia::tileSet);
         PUI::showTileMapSpritesUI();
         _setStatusUpdate(StoryStatuses::updateBegin);
@@ -309,8 +363,7 @@ namespace game
             _player.position().y - LCDHEIGHT / 2
         };
     
-        if (_tilemapIsShown)
-            _tilemap.draw(-cameraPosition.x, -cameraPosition.y);
+        _tilemap.draw(-cameraPosition.x, -cameraPosition.y);
         // Temp.
         //PD::drawSprite(-cameraPosition.x, -cameraPosition.y, ToiletPaper, false, false, 0);
         if (_playerIsShown)

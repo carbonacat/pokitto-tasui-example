@@ -26,7 +26,10 @@ namespace game
         
         static inline void loadBlack(Tilemap& tilemap) noexcept
         {
-            tilemap.set(0, 0, nullptr);
+            static uint8_t emptyTilemap = 0;
+            
+            tilemap.set(1, 1, &emptyTilemap);
+            tilemap.setTile(0, 0, 0, nullptr);
         }
     };
 }

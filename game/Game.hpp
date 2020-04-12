@@ -25,7 +25,6 @@ namespace game
     private: // Game components.
         static inline bool _playerIsShown = false;
         static inline Player _player;
-        static inline bool _tilemapIsShown = false;
         static inline Tilemap _tilemap;
         
     private: // StoryStatuses.
