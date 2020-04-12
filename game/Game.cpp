@@ -70,6 +70,7 @@ namespace game
                 
                 // Renders the UI box, giving a margin of 1.
                 PUI::drawBox(dialogFirst.x, dialogFirst.y, dialogLast.x, dialogLast.y);
+                PUI::setCursorDelta(UIVariants::standard);
                 PUI::setCursorBoundingBox(dialogFirst.x + 1, dialogFirst.y + 1, dialogLast.x - 1, dialogLast.y - 1);
                 
                 _textLimit = 0;
@@ -109,6 +110,9 @@ namespace game
             
             PUI::clear();
             PUI::resetCursorBoundingBox();
+            _textLimit = 0;
+            _entireTextIsShown = false;
+            _hintTimer = 0;
         }
         
         // Use the UI to make a transition from black to the map+sprites.
@@ -149,6 +153,7 @@ namespace game
             return _statusFrameNumber >= frameCountUntilTransitionIsDone;
         }
         
+        // Renders a center text on the screen on a black screen, letter by letter.
         static bool onFloatingText(const char* text) noexcept
         {
             auto textLen = strlen(text);
@@ -158,13 +163,36 @@ namespace game
             PUI::resetCursorBoundingBox();
             PUI::setCursorDelta(UIVariants::blackBG);
             PUI::setCursor((PUI::mapColumns - textLen) / 2, PUI::mapRows / 2);
-            PUI::printText("The end.", textLimit);
+            PUI::printText(text, textLimit);
             return textLimit > textLen;
+        }
+        
+        // Renders a hint with half BG, letter by letter.
+        static void onHint(const char* text) noexcept
+        {
+            auto textLimit = _hintTimer / frameToLimitDivider;
+            auto textLen = strlen(text);
+            
+            PUI::setCursorDelta(UIVariants::halfBlackBG);
+            PUI::setCursor(1, 0);
+            PUI::printText(text, textLimit);
+            _hintTimer += (textLimit < textLen) ? 1 : 0;
+        }
+        
+        // Erases the hint, letter by letter.
+        static void onDehint() noexcept
+        {
+            _hintTimer -= (_hintTimer > 0) ? 1 : 0;
+            
+            auto textLimit = _hintTimer / frameToLimitDivider;
+            
+            PUI::fillRectTiles(1 + textLimit, 0, PUI::mapColumns - 1, 0, 0);
         }
         
     private:
         static inline int _textLimit = 0;
         static inline bool _entireTextIsShown = false;
+        static inline int _hintTimer;
     };
     
     // Current story status of the player.
@@ -207,6 +235,8 @@ namespace game
         // Going into GoToTitle tiles -> fadeOutToEscape.
         static void updateMustGoInFrontOfTheFountain() noexcept
         {
+            using PB = Pokitto::Buttons;
+            
             _player.updateExploration();
             
             auto playerTile = EnvTools::tileAtPosition(_player.position());
@@ -215,13 +245,12 @@ namespace game
                 _setStatusUpdate(StoryStatuses::updateFadeOutToEscape);
             else if (playerTile & FountainFront)
             {
-                // Draw hint.
-                _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
+                Toolbox::onHint("A - Talk?");
+                if (PB::pressed(BTN_A))
+                    _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
             }
             else
-            {
-                // Remove hint.
-            }
+                Toolbox::onDehint();
         }
         
         // Dialog. "Please ... I need ... some ... TP ... to get ... out ... of here!".
