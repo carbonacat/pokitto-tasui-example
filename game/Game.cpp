@@ -22,9 +22,33 @@ namespace game
         
         static constexpr int frameToLimitDivider = 4;
         static constexpr int frameToNextBlinkDivider = 16;
+        static constexpr int frameToTileDivider = 1;
+        static constexpr int frameCountUntilTransitionIsDone = frameToTileDivider * (PUI::mapColumns + PUI::mapRows + 1);
             
         static constexpr Vector2 dialogFirst = {dialogMargin, dialogMargin};
         static constexpr Vector2 dialogLast = {PUI::mapColumns - 1 - dialogMargin, dialogMargin + dialogHeight};
+        static constexpr unsigned pureBlackColor = 255; // Flashy pink is once again sacrificed.
+        
+        struct UIVariants
+        {
+            static constexpr unsigned standard = 0;
+            static constexpr unsigned darkBG = 8;
+            static constexpr unsigned halfTransparentDarkBG = 16;
+        };
+        
+        static void setupVariants() noexcept
+        {
+            for (int colorI = 0; colorI < 8; colorI++)
+            {
+                PUI::mapColor(UIVariants::darkBG + colorI, colorI);
+                PUI::mapColor(UIVariants::halfTransparentDarkBG + colorI, colorI);
+            }
+            // Using 0 as a remapped color will make it transparent.
+            PUI::mapColor(UIVariants::darkBG + puits::UltimateUtopia::Colors::bg1, pureBlackColor);
+            PUI::mapColor(UIVariants::darkBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
+            PUI::mapColor(UIVariants::halfTransparentDarkBG + puits::UltimateUtopia::Colors::bg1, 0);
+            PUI::mapColor(UIVariants::halfTransparentDarkBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
+        }
         
     
     public: // Dialogs.
@@ -77,12 +101,33 @@ namespace game
             return false;
         }
         
-        static void clearDialog() noexcept
+        // Clear the UI.
+        static void clear() noexcept
         {
             using PUI = Pokitto::UI;
             
             PUI::clear();
             PUI::resetCursorBoundingBox();
+        }
+        
+        // Use the UI to make a transition from black to the map+sprites.
+        static bool onFadeInTransition() noexcept
+        {
+            if (_statusFrameNumber == 0)
+            {
+                PUI::clear(32, UIVariants::darkBG);
+            }
+            if (_statusFrameNumber % frameToTileDivider == 0)
+            {
+                auto reach = _statusFrameNumber / frameToTileDivider;
+                
+                for (int i = reach; i >= 0; i--)
+                {
+                    PUI::setTileAndDelta(i, reach - i, 32, UIVariants::halfTransparentDarkBG);
+                    PUI::setTile(i - 2, reach - i, 0);
+                }
+            }
+            return _statusFrameNumber >= frameCountUntilTransitionIsDone;
         }
         
     private:
@@ -103,19 +148,17 @@ namespace game
             if (Toolbox::onDialog("Hi!\nWelcome to that TASMODE/TASUI Demo!"))
                 _setStatusUpdate(StoryStatuses::updateHearTheIntroductionToTheGame);
         }
-        // Conclusion -> mustGoInFrontOfTheFountain.
+        
         static void updateHearTheIntroductionToTheGame() noexcept
         {
             if (Toolbox::onDialog("It's a simple demo about dialogs, in the form of a micro adventure.\nI suggest you try to go in front of the fountain for starters!"))
             {
-                Toolbox::clearDialog();
-                _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
+                Toolbox::clear();
+                _setStatusUpdate(StoryStatuses::updateTransitionToTheMap);
             }
         }
-        // Exploration.
-        // Going in FountainFront tiles and pressing A -> hearTheFountainQuest.
-        // Going into GoToTitle tiles -> fadeOutToEscape.
-        static void updateMustGoInFrontOfTheFountain() noexcept
+        
+        static void updateTransitionToTheMap() noexcept
         {
             if (_onFirstFrame())
             {
@@ -124,6 +167,14 @@ namespace game
                 _tilemapIsShown = true;
                 _player.prepareForExploration();
             }
+            if (Toolbox::onFadeInTransition())
+                _setStatusUpdate(StoryStatuses::updateMustGoInFrontOfTheFountain);
+        }
+        // Exploration.
+        // Going in FountainFront tiles and pressing A -> hearTheFountainQuest.
+        // Going into GoToTitle tiles -> fadeOutToEscape.
+        static void updateMustGoInFrontOfTheFountain() noexcept
+        {
             _player.updateExploration();
         }
         
@@ -236,10 +287,13 @@ namespace game
     
         PC::begin();
         PD::loadRGBPalette(miloslav);
+        PD::palette[Toolbox::pureBlackColor] = 0;
         EnvTools::loadGarden(_tilemap);
         PUI::setTilesetImage(puits::UltimateUtopia::tileSet);
         PUI::showTileMapSpritesUI();
         _setStatusUpdate(StoryStatuses::updateBegin);
+        
+        Toolbox::setupVariants();
     }
     
     void Game::update() {
@@ -248,8 +302,6 @@ namespace game
     }
     
     void Game::render() {
-        using PD = Pokitto::Display;
-    
         // Camera is centered on the player.
         Vector2 cameraPosition
         {
