@@ -10,7 +10,7 @@ struct Vector2
 
 // Operators.
 
-inline Vector2 operator+(const Vector2& a, const Vector2& b) noexcept
+inline constexpr Vector2 operator+(const Vector2& a, const Vector2& b) noexcept
 {
     return {a.x + b.x, a.y + b.y};
 }
