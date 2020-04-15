@@ -33,6 +33,7 @@ namespace game
             static constexpr unsigned standard = 0;
             static constexpr unsigned blackBG = 8;
             static constexpr unsigned halfBlackBG = 16;
+            static constexpr unsigned red = 24;
         };
         
         static void setupVariants() noexcept
@@ -41,12 +42,18 @@ namespace game
             {
                 PUI::mapColor(UIVariants::blackBG + colorI, colorI);
                 PUI::mapColor(UIVariants::halfBlackBG + colorI, colorI);
+                // Red keeps the standard's background, but will have variants of red otherwise.
+                PUI::mapColor(UIVariants::red + colorI, 168 + colorI);
             }
             // Using 0 as a remapped color will make it transparent.
             PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia::Colors::bg1, pureBlackColor);
             PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
             PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia::Colors::bg1, 0);
             PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
+            // Red keeps the standard's background, but will have variants of red otherwise.
+            PUI::mapColor(UIVariants::red + puits::UltimateUtopia::Colors::outside, puits::UltimateUtopia::Colors::outside);
+            PUI::mapColor(UIVariants::red + puits::UltimateUtopia::Colors::bg1, puits::UltimateUtopia::Colors::bg1);
+            PUI::mapColor(UIVariants::red + puits::UltimateUtopia::Colors::bg2, puits::UltimateUtopia::Colors::bg2);
         }
         
     
@@ -113,6 +120,120 @@ namespace game
             _hintTimer = 0;
         }
         
+        
+    private: // Hacking Sequence.
+        static inline struct
+        {
+            int progress;
+            int remainingLockedFrames;
+            std::uint8_t previousButtonsStates; // Nice trick from tuxinator2009.
+        } hacking {};
+
+    
+    public: // Hacking Sequence.
+        enum struct HackingResult
+        {
+            progress,
+            failed,
+            success
+        };
+        
+        // Initiates and conducts the Hacking Sequence.
+        // - If the Progress gets over `progressForSuccess`, it succeded.
+        // - If the Progress reaches 0, it failed.
+        // - Every each `framePerDecrementTick` frames, the Progress will be lowered by `progressDecrement`.
+        // - When pressing the right button, `progressIncrementIfRight` is added to the Progress.
+        // - When pressing the wrong button, `lockedFramesIfWrong` frames will be waited until being able to enter again a sequence.
+        // - Not compatible with the Dialog.
+        // - Big up to Torbuntu!
+        static HackingResult onHacking(const char* title,
+                                       int initialProgress, int progressForSuccess,
+                                       int progressDecrement, int framePerDecrement,
+                                       int progressIncrementIfRight, int lockedFramesIfWrong) noexcept
+        {
+            using PB = Pokitto::Buttons;
+            
+            if (_onFirstFrame())
+            {
+                // Clears the UI.
+                PUI::clear();
+                PUI::setOffset(-1, 0);
+                
+                // Renders the UI box, giving a margin of 1.
+                PUI::drawBox(dialogFirst.x, dialogFirst.y, dialogLast.x, dialogLast.y);
+                PUI::setCursor(dialogFirst.x + 1, dialogFirst.y + 1);
+                PUI::setCursorDelta(UIVariants::standard);
+                PUI::printString(title);
+    
+                hacking.progress = initialProgress;
+                hacking.remainingLockedFrames = 0;
+                // TODO: init the sequence.
+                
+                // Doing this here avoid previously pressed buttons (e.g. when ending a dialog).
+                hacking.previousButtonsStates = PB::buttons_state;
+            }
+            
+            // Initial check.
+            if (hacking.progress <= 0)
+                return HackingResult::failed;
+            if (hacking.progress >= progressForSuccess)
+                return HackingResult::success;
+            
+            
+            // Updating the progress.
+            {
+                // Decrementing the progress at the right frame.
+                if (_statusFrameNumber % framePerDecrement == 0)
+                    hacking.progress -= progressDecrement;
+                
+                // Nice trick from tuxinator2009.
+                // A button was just pressed if it's currently pressed, but wasn't previously.
+                auto justPressedStates = PB::buttons_state & (~hacking.previousButtonsStates);
+                // TODO: Read the expected sequence.
+                auto expectedButton = BTN_UP;
+                
+                if (hacking.remainingLockedFrames > 0)
+                    hacking.remainingLockedFrames--;
+                else if (justPressedStates)
+                {
+                    // Was a button just pressed?
+                    if (justPressedStates & (1 << expectedButton))
+                    {
+                        // Good!
+                        hacking.progress += progressIncrementIfRight;
+                        // TODO: Advance in the sequence.
+                    }
+                    else
+                    {
+                        // Wrong...
+                        hacking.remainingLockedFrames = lockedFramesIfWrong;
+                    }
+                }
+                hacking.previousButtonsStates = PB::buttons_state;
+            }
+            
+            // Rendering the gauge.
+            {
+                static constexpr auto gaugeFirst = dialogFirst + Vector2{1, 3};
+                static constexpr auto gaugeLast = Vector2{dialogLast.x - 1, gaugeFirst.y};
+                
+                PUI::drawGauge(gaugeFirst.x, gaugeLast.x, gaugeFirst.y,
+                               hacking.progress, progressForSuccess);
+                PUI::fillRectDeltas(gaugeFirst.x, gaugeFirst.y, gaugeLast.x, gaugeLast.y,
+                                    (hacking.remainingLockedFrames > 0) ? UIVariants::red : UIVariants::standard);
+            }
+            
+            // Checking the end conditions.
+            if (hacking.progress < 0)
+                return HackingResult::failed;
+            if (hacking.progress >= progressForSuccess)
+                return HackingResult::success;
+            return HackingResult::progress;
+        }
+        
+        
+    public: // Transitions.
+        
         // Use the UI to make a transition from black to the map+sprites.
         static bool onFadeInTransition() noexcept
         {
@@ -151,6 +272,9 @@ namespace game
             return _statusFrameNumber >= frameCountUntilTransitionIsDone;
         }
         
+        
+    public: // Tips & Hints.
+    
         // Renders a center text on the screen on a black screen, letter by letter.
         static bool onFloatingText(const char* text) noexcept
         {
@@ -203,7 +327,36 @@ namespace game
         // Initial state.
         static void updateBegin() noexcept
         {
-            if (Toolbox::onDialog("Hi!\nWelcome to that TASMODE/TASUI Demo!"))
+            using HackingResult = Toolbox::HackingResult;
+            
+            switch (Toolbox::onHacking("Searching the grass...",
+                                       256, 1024,
+                                       1, 2,
+                                       16, 32))
+            {
+            case HackingResult::failed:
+                _setStatusUpdate(StoryStatuses::tmpHackingFailed);
+                break ;
+            case HackingResult::progress:
+                // The hacking is still going on, nothing to do.
+                break ;
+            case HackingResult::success:
+                _setStatusUpdate(StoryStatuses::tmpHackingOK);
+                break ;
+            }
+            //if (Toolbox::onDialog("Hi!\nWelcome to that TASMODE/TASUI Demo!"))
+            //    _setStatusUpdate(StoryStatuses::updateHearTheIntroductionToTheGame);
+        }
+        
+        static void tmpHackingOK() noexcept
+        {
+            if (Toolbox::onDialog("Hacking finished! I mean, you found the TP!"))
+                _setStatusUpdate(StoryStatuses::updateHearTheIntroductionToTheGame);
+        }
+        
+        static void tmpHackingFailed() noexcept
+        {
+            if (Toolbox::onDialog("Duuuude..."))
                 _setStatusUpdate(StoryStatuses::updateHearTheIntroductionToTheGame);
         }
         
