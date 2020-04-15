@@ -34,6 +34,7 @@ namespace game
             static constexpr unsigned blackBG = 8;
             static constexpr unsigned halfBlackBG = 16;
             static constexpr unsigned red = 24;
+            static constexpr unsigned green = 32;
         };
         
         static void setupVariants() noexcept
@@ -42,18 +43,22 @@ namespace game
             {
                 PUI::mapColor(UIVariants::blackBG + colorI, colorI);
                 PUI::mapColor(UIVariants::halfBlackBG + colorI, colorI);
-                // Red keeps the standard's background, but will have variants of red otherwise.
+                // Red/Green keeps the standard's background, but will have variants of red/green otherwise.
                 PUI::mapColor(UIVariants::red + colorI, 168 + colorI);
+                PUI::mapColor(UIVariants::green + colorI, 192 + colorI);
             }
             // Using 0 as a remapped color will make it transparent.
             PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia::Colors::bg1, pureBlackColor);
             PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
             PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia::Colors::bg1, 0);
             PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia::Colors::bg2, pureBlackColor);
-            // Red keeps the standard's background, but will have variants of red otherwise.
+            // Red/Green keeps the standard's background, but will have variants of red/green otherwise.
             PUI::mapColor(UIVariants::red + puits::UltimateUtopia::Colors::outside, puits::UltimateUtopia::Colors::outside);
             PUI::mapColor(UIVariants::red + puits::UltimateUtopia::Colors::bg1, puits::UltimateUtopia::Colors::bg1);
             PUI::mapColor(UIVariants::red + puits::UltimateUtopia::Colors::bg2, puits::UltimateUtopia::Colors::bg2);
+            PUI::mapColor(UIVariants::green + puits::UltimateUtopia::Colors::outside, puits::UltimateUtopia::Colors::outside);
+            PUI::mapColor(UIVariants::green + puits::UltimateUtopia::Colors::bg1, puits::UltimateUtopia::Colors::bg1);
+            PUI::mapColor(UIVariants::green + puits::UltimateUtopia::Colors::bg2, puits::UltimateUtopia::Colors::bg2);
         }
         
     
@@ -122,12 +127,63 @@ namespace game
         
         
     private: // Hacking Sequence.
-        static inline struct
+        static inline struct Hacking
         {
+            using ButtonSequence = std::array<std::uint8_t, 15>;
+            
+            static constexpr auto gaugeFirst = dialogFirst + Vector2{1, 3};
+            static constexpr auto gaugeLast = Vector2{dialogLast.x - 1, gaugeFirst.y};
+            static constexpr auto sequenceFirst = Vector2{dialogFirst.x + 2, dialogFirst.y + 4};
+            static constexpr auto sequenceLast = Vector2{dialogLast.x - 2, dialogFirst.y + 4};
+
+            // General progress.
             int progress;
+            // If positive, the number of frame the input is locked.
             int remainingLockedFrames;
-            std::uint8_t previousButtonsStates; // Nice trick from tuxinator2009.
+            // Nice trick from tuxinator2009.
+            std::uint8_t previousButtonsStates;
+            // The sequence to follow
+            ButtonSequence sequence;
+            // Where we are in the sequence.
+            unsigned sequenceIndex;
         } hacking {};
+        
+        static std::uint8_t indexForButton(std::uint8_t buttonId) noexcept
+        {
+            using PB = Pokitto::UI;
+            
+            switch (buttonId)
+            {
+            case LEFTBIT:
+                return PUI::indexForSymbol(PUI::Symbol::left);
+            case RIGHTBIT:
+                return PUI::indexForSymbol(PUI::Symbol::right);
+            case UPBIT:
+                return PUI::indexForSymbol(PUI::Symbol::up);
+            case DOWNBIT:
+                return PUI::indexForSymbol(PUI::Symbol::down);
+            case ABIT:
+                return 'A';
+            case BBIT:
+                return 'B';
+            case CBIT:
+                return 'C';
+            }
+            return '?';
+        }
+        
+        static void generateAndRenderSequence(int sequenceCount) noexcept
+        {
+            for (int sequenceI = 0; sequenceI < sequenceCount; sequenceI++)
+            {
+                auto sequenceButton = rand() % NUM_BTN; // all buttons!
+                
+                hacking.sequence[sequenceI] = sequenceButton;
+                PUI::setTileAndDelta(Hacking::sequenceFirst.x + sequenceI * 2, Hacking::sequenceFirst.y, indexForButton(sequenceButton), UIVariants::standard);
+                if (sequenceI + 1 < sequenceCount)
+                    PUI::setTileAndDelta(Hacking::sequenceFirst.x + sequenceI * 2 + 1, Hacking::sequenceFirst.y, '-', UIVariants::standard);
+            }
+        }
 
     
     public: // Hacking Sequence.
@@ -139,17 +195,19 @@ namespace game
         };
         
         // Initiates and conducts the Hacking Sequence.
+        // - A sequence of `sequenceCount` will be generated.
         // - If the Progress gets over `progressForSuccess`, it succeded.
         // - If the Progress reaches 0, it failed.
         // - Every each `framePerDecrementTick` frames, the Progress will be lowered by `progressDecrement`.
-        // - When pressing the right button, `progressIncrementIfRight` is added to the Progress.
-        // - When pressing the wrong button, `lockedFramesIfWrong` frames will be waited until being able to enter again a sequence.
+        // - When pressing the right button, the generated sequence will progress.
+        // - When finishing a sequence, `progressIncrementIfSequenceDone` will be added to the Progress.
+        // - When pressing the wrong button, the sequence will be reset and `lockedFramesIfWrong` frames will be waited until being able to enter again a sequence.
         // - Not compatible with the Dialog.
         // - Big up to Torbuntu!
         static HackingResult onHacking(const char* title,
                                        int initialProgress, int progressForSuccess,
                                        int progressDecrement, int framePerDecrement,
-                                       int progressIncrementIfRight, int lockedFramesIfWrong) noexcept
+                                       int sequenceCount, int progressIncrementIfSequenceDone, int lockedFramesIfWrong) noexcept
         {
             using PB = Pokitto::Buttons;
             
@@ -167,8 +225,10 @@ namespace game
     
                 hacking.progress = initialProgress;
                 hacking.remainingLockedFrames = 0;
-                // TODO: init the sequence.
                 
+                generateAndRenderSequence(sequenceCount);
+                hacking.sequenceIndex = 0;
+
                 // Doing this here avoid previously pressed buttons (e.g. when ending a dialog).
                 hacking.previousButtonsStates = PB::buttons_state;
             }
@@ -190,7 +250,7 @@ namespace game
                 // A button was just pressed if it's currently pressed, but wasn't previously.
                 auto justPressedStates = PB::buttons_state & (~hacking.previousButtonsStates);
                 // TODO: Read the expected sequence.
-                auto expectedButton = BTN_UP;
+                auto expectedButton = hacking.sequence[hacking.sequenceIndex];
                 
                 if (hacking.remainingLockedFrames > 0)
                     hacking.remainingLockedFrames--;
@@ -200,13 +260,21 @@ namespace game
                     if (justPressedStates & (1 << expectedButton))
                     {
                         // Good!
-                        hacking.progress += progressIncrementIfRight;
-                        // TODO: Advance in the sequence.
+                        hacking.sequenceIndex++;
+                        // If we finished the sequence...
+                        if (hacking.sequenceIndex >= sequenceCount)
+                        {
+                            // We get points and a new one!
+                            hacking.progress += progressIncrementIfSequenceDone;
+                            generateAndRenderSequence(sequenceCount);
+                            hacking.sequenceIndex = 0;
+                        }
                     }
                     else
                     {
                         // Wrong...
                         hacking.remainingLockedFrames = lockedFramesIfWrong;
+                        hacking.sequenceIndex = 0;
                     }
                 }
                 hacking.previousButtonsStates = PB::buttons_state;
@@ -214,13 +282,25 @@ namespace game
             
             // Rendering the gauge.
             {
-                static constexpr auto gaugeFirst = dialogFirst + Vector2{1, 3};
-                static constexpr auto gaugeLast = Vector2{dialogLast.x - 1, gaugeFirst.y};
-                
-                PUI::drawGauge(gaugeFirst.x, gaugeLast.x, gaugeFirst.y,
+                PUI::drawGauge(Hacking::gaugeFirst.x, Hacking::gaugeLast.x, Hacking::gaugeFirst.y,
                                hacking.progress, progressForSuccess);
-                PUI::fillRectDeltas(gaugeFirst.x, gaugeFirst.y, gaugeLast.x, gaugeLast.y,
-                                    (hacking.remainingLockedFrames > 0) ? UIVariants::red : UIVariants::standard);
+                if (hacking.remainingLockedFrames > 0)
+                {
+                    PUI::fillRectDeltas(Hacking::gaugeFirst.x, Hacking::gaugeFirst.y, Hacking::gaugeLast.x, Hacking::gaugeLast.y,
+                                        UIVariants::red);
+                    PUI::fillRectDeltas(Hacking::sequenceFirst.x, Hacking::sequenceFirst.y, Hacking::sequenceLast.x, Hacking::sequenceLast.y,
+                                        UIVariants::red);
+                }
+                else
+                {
+                    PUI::fillRectDeltas(Hacking::gaugeFirst.x, Hacking::gaugeFirst.y, Hacking::gaugeLast.x, Hacking::gaugeLast.y,
+                                        UIVariants::standard);
+                    PUI::fillRectDeltas(Hacking::sequenceFirst.x, Hacking::sequenceFirst.y, Hacking::sequenceFirst.x + hacking.sequenceIndex * 2 - 1, Hacking::sequenceLast.y,
+                                        UIVariants::green);
+                    PUI::fillRectDeltas(Hacking::sequenceFirst.x + hacking.sequenceIndex * 2 + 1, Hacking::sequenceFirst.y, Hacking::sequenceLast.x, Hacking::sequenceLast.y,
+                                        UIVariants::standard);
+                    PUI::setDelta(Hacking::sequenceFirst.x + hacking.sequenceIndex * 2, Hacking::sequenceFirst.y, UIVariants::blackBG);
+                }
             }
             
             // Checking the end conditions.
@@ -327,25 +407,8 @@ namespace game
         // Initial state.
         static void updateBegin() noexcept
         {
-            using HackingResult = Toolbox::HackingResult;
-            
-            switch (Toolbox::onHacking("Searching the grass...",
-                                       256, 1024,
-                                       1, 2,
-                                       16, 32))
-            {
-            case HackingResult::failed:
-                _setStatusUpdate(StoryStatuses::tmpHackingFailed);
-                break ;
-            case HackingResult::progress:
-                // The hacking is still going on, nothing to do.
-                break ;
-            case HackingResult::success:
-                _setStatusUpdate(StoryStatuses::tmpHackingOK);
-                break ;
-            }
-            //if (Toolbox::onDialog("Hi!\nWelcome to that TASMODE/TASUI Demo!"))
-            //    _setStatusUpdate(StoryStatuses::updateHearTheIntroductionToTheGame);
+            if (Toolbox::onDialog("Hi!\nWelcome to that TASMODE/TASUI Demo!"))
+                _setStatusUpdate(StoryStatuses::updateHearTheIntroductionToTheGame);
         }
         
         static void tmpHackingOK() noexcept
@@ -434,15 +497,41 @@ namespace game
             {
                 Toolbox::onHint("A - Search");
                 if (PB::pressed(BTN_A))
-                {
-                    _player.sprite().play(dude, Dude::yay);
-                    _setStatusUpdate(StoryStatuses::updateGotTheLegendaryTP);
-                }
+                    _setStatusUpdate(StoryStatuses::updateFindingTP);
             }
             else
                 Toolbox::onDehint();
         }
         
+        static void updateFindingTP() noexcept
+        {
+            using HackingResult = Toolbox::HackingResult;
+            
+            Toolbox::onDehint();
+            switch (Toolbox::onHacking("Searching the Grass...",
+                                       256, 1024,
+                                       1, 4,
+                                       8, 256, 32))
+            {
+            case HackingResult::failed:
+                _setStatusUpdate(StoryStatuses::updateTheTPEscaped);
+                break ;
+            case HackingResult::progress:
+                // The hacking is still going on, nothing to do.
+                break ;
+            case HackingResult::success:
+                _player.sprite().play(dude, Dude::yay);
+                _setStatusUpdate(StoryStatuses::updateGotTheLegendaryTP);
+                break ;
+            }
+        }
+        
+        static void updateTheTPEscaped() noexcept
+        {
+            Toolbox::onDehint();
+            if (Toolbox::onDialog("Unfortunately the TP fled away."))
+                _setStatusUpdate(StoryStatuses::updateMustFindTP);
+        }
         static void updateGotTheLegendaryTP() noexcept
         {
             Toolbox::onDehint();
