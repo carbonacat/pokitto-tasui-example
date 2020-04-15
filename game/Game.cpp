@@ -510,7 +510,7 @@ namespace game
             Toolbox::onDehint();
             switch (Toolbox::onHacking("Searching the Grass...",
                                        256, 1024,
-                                       1, 4,
+                                       1, 3,
                                        8, 256, 32))
             {
             case HackingResult::failed:
@@ -530,7 +530,10 @@ namespace game
         {
             Toolbox::onDehint();
             if (Toolbox::onDialog("Unfortunately the TP fled away."))
+            {
+                Toolbox::clear();
                 _setStatusUpdate(StoryStatuses::updateMustFindTP);
+            }
         }
         static void updateGotTheLegendaryTP() noexcept
         {
