@@ -6,6 +6,7 @@
 #include "game/EnvTools.hpp"
 #include <tasui>
 #include <puits_UltimateUtopia.h>
+#include <puits_UltimateUtopia4.h>
 
 
 namespace game
@@ -37,7 +38,7 @@ namespace game
             static constexpr unsigned green = 32;
         };
         
-        static void setupVariants() noexcept
+        static void setupVariantsForUltimateUtopia() noexcept
         {
             for (int colorI = 0; colorI < 8; colorI++)
             {
@@ -59,6 +60,30 @@ namespace game
             PUI::mapColor(UIVariants::green + puits::UltimateUtopia::Colors::outside, puits::UltimateUtopia::Colors::outside);
             PUI::mapColor(UIVariants::green + puits::UltimateUtopia::Colors::bg1, puits::UltimateUtopia::Colors::bg1);
             PUI::mapColor(UIVariants::green + puits::UltimateUtopia::Colors::bg2, puits::UltimateUtopia::Colors::bg2);
+            
+            PUI::setTilesetImage(puits::UltimateUtopia::tileSet);
+        }
+        
+        static void setupVariantsForUltimateUtopia4() noexcept
+        {
+            constexpr int defaultColors[4] = {0, 11, 90, 6};
+            
+            for (int colorI = 0; colorI < 4; colorI++)
+            {
+                PUI::mapColor(UIVariants::standard + colorI, defaultColors[colorI]);
+                PUI::mapColor(UIVariants::blackBG + colorI, defaultColors[colorI]);
+                PUI::mapColor(UIVariants::halfBlackBG + colorI, defaultColors[colorI]);
+                PUI::mapColor(UIVariants::red + colorI, defaultColors[colorI]);
+                PUI::mapColor(UIVariants::green + colorI, defaultColors[colorI]);
+            }
+            // Using 0 as a remapped color will make it transparent.
+            PUI::mapColor(UIVariants::blackBG + puits::UltimateUtopia4::Colors::bg, pureBlackColor);
+            PUI::mapColor(UIVariants::halfBlackBG + puits::UltimateUtopia4::Colors::bg, 0);
+            // Red/Green keeps the standard's background, but will have variants of red/green otherwise.
+            PUI::mapColor(UIVariants::red + puits::UltimateUtopia4::Colors::main, 174);
+            PUI::mapColor(UIVariants::green + puits::UltimateUtopia4::Colors::main, 204);
+        
+            PUI::setTilesetImage(puits::UltimateUtopia4::tileSet);
         }
         
     
@@ -688,11 +713,10 @@ namespace game
         PC::begin();
         PD::loadRGBPalette(miloslav);
         PD::palette[Toolbox::pureBlackColor] = 0;
-        PUI::setTilesetImage(puits::UltimateUtopia::tileSet);
         PUI::showTileMapSpritesUI();
         _setStatusUpdate(StoryStatuses::updateBegin);
         
-        Toolbox::setupVariants();
+        Toolbox::setupVariantsForUltimateUtopia();
     }
     
     void Game::update() {
